@@ -1,0 +1,68 @@
+There are two halves to the NetworkTable protocol: the server and the client.  The cRIO is the server, and all other entities are clients that dial into the server.  The protocol spoken is mostly symmetrical, but the server keeps everything synchronized.
+
+The port for communication is 1735 over TCP.
+
+Each transaction (whether explicit or implicit) consists of a message sent in one direction, then a confirmation or denial sent back.
+
+Each communication starts with a one-byte command code.
+
+A data message:
+1-5 bytes: Code+ID
+1 byte: Code 2
+If Code 2 >= CODE_TABLE_ID:
+    // A table is being used as a value
+    0-4 more bytes: Table ID (part of Code 2)
+Else:
+    Variable size: An entry
+
+An old data message (I'm not sure if this is ever used):
+1 byte: Code
+1-5 bytes: ID
+1 byte: UNKNOWN
+
+A table assignment message:
+1 byte: Code
+1-5 bytes: Local table ID
+1-5 bytes: Remote table ID
+
+An assignment message:
+1 byte: Code
+1-5 bytes: Remote table ID
+String: Key name
+1-5 bytes: Key ID
+
+A table request message (only sent from client to server):
+1 byte: Code
+String: Table name
+1-5 bytes: Table ID
+
+A confirmation message:
+1 byte: Code+Number of Confirmations
+
+A denial message (only sent from server to client, clients must always confirm server's messages):
+1 byte: Code+Number of Denials
+
+Transactions are toggled by sending the one byte transaction code as a message.
+
+**********
+Timeline
+**********
+
+The server creates Table A (ID 10) with key B (ID 94), initial value 42.
+The client uses ID 5 for Table A and ID 6 for key B.
+
+During the trace, the client gives a new value (-27) to B, and then creates a new key, C (Server ID 103, Client ID 7) with a boolean value of true
+
+Client          Client Payload  Server          Server Payload
+==============  ==============  ==============  ==============
+Table Request   "A", 5
+                                Table Assign    5, 10
+                                Assign          10, "B", 94
+                                Data            94, Int, 42
+Confirm         1
+Assign          5, "B", 6
+Data            6, Int, -27
+                                Confirm         1
+Assign          5, "C", 7
+Data            7, True
+                                Confirm         1
