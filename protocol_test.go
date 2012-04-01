@@ -27,6 +27,11 @@ func TestClientPut(t *testing.T) {
 	// Send table assignment from server
 	conn.wServer.Write([]byte{0x03, 0x40, 0x4a})
 
+	// Ensure A has no key B
+	if table.Get("B") != nil {
+		t.Errorf("Table starts off with a value for B")
+	}
+
 	// Put B
 	ch := make(chan error)
 	go func() {
