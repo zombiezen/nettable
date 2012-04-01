@@ -168,7 +168,7 @@ func (c *Client) readData() error {
 	defer c.lock.Unlock()
 	localID, ok := c.remoteKeys[remoteID]
 	if !ok {
-		return ErrKey
+		return errKey
 	}
 	k := c.keys[localID]
 	c.tables[k.TableID].update(k.Name, entry)
@@ -194,7 +194,7 @@ func (c *Client) readTableAssignment() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if _, ok := c.tables[localTableID]; !ok {
-		return ErrKey
+		return errKey
 	}
 
 	c.remoteTables[remoteTableID] = localTableID
@@ -223,7 +223,7 @@ func (c *Client) readAssignment() error {
 	defer c.lock.Unlock()
 	localTableID, ok := c.remoteTables[remoteTableID]
 	if !ok {
-		return ErrKey
+		return errKey
 	}
 	for _, k := range c.keys {
 		if k.TableID == localTableID && k.Name == keyName {
