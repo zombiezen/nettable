@@ -6,6 +6,8 @@ import (
 	"sync"
 )
 
+// ErrDenial is returned when a key's value is changed while the client is
+// performing a Put.
 var ErrDenial = errors.New("Value changed by peer")
 
 // Table is a network-synchronized key-value collection.  You can obtain a table

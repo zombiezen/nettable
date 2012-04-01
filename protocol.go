@@ -9,10 +9,14 @@ import (
 	"sync"
 )
 
-var ErrKey = errors.New("Unrecognized ID")
+// errKey is an error that is returned when the server sends an ID the client
+// doesn't understand.
+var errKey = errors.New("Unrecognized ID")
 
+// DefaultPort is the TCP port that WPILib uses for NetworkTables.
 const DefaultPort = 1735
 
+// Message codes
 const (
 	codeString          = 0
 	codeInt             = 1
@@ -164,8 +168,7 @@ func (c *Client) readData() error {
 	defer c.lock.Unlock()
 	localID, ok := c.remoteKeys[remoteID]
 	if !ok {
-		// XXX: This isn't a key we know about. Ignore it.
-		return nil
+		return ErrKey
 	}
 	k := c.keys[localID]
 	c.tables[k.TableID].update(k.Name, entry)
@@ -191,8 +194,7 @@ func (c *Client) readTableAssignment() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	if _, ok := c.tables[localTableID]; !ok {
-		// XXX: This isn't a table we know about. Ignore the assignment for now.
-		return nil
+		return ErrKey
 	}
 
 	c.remoteTables[remoteTableID] = localTableID
@@ -221,8 +223,7 @@ func (c *Client) readAssignment() error {
 	defer c.lock.Unlock()
 	localTableID, ok := c.remoteTables[remoteTableID]
 	if !ok {
-		// XXX: This isn't a table we know about. Ignore the assignment for now.
-		return nil
+		return ErrKey
 	}
 	for _, k := range c.keys {
 		if k.TableID == localTableID && k.Name == keyName {
