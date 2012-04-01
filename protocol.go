@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"errors"
 	"io"
-	"net"
 	"sync"
 )
 
@@ -40,8 +39,8 @@ type encoder interface {
 
 // Client is a connection to a NetworkTables server.
 type Client struct {
-	c net.Conn
-	r *bufio.Reader
+	rwc io.ReadWriteCloser
+	r   *bufio.Reader
 
 	lock         sync.Mutex
 	nextTableID  ID
@@ -59,11 +58,11 @@ type Client struct {
 	wg sync.WaitGroup
 }
 
-// NewClient creates a new client from a net.Conn.
-func NewClient(c net.Conn) *Client {
+// NewClient creates a new client from a connection.
+func NewClient(rwc io.ReadWriteCloser) *Client {
 	client := &Client{
-		c:            c,
-		r:            bufio.NewReaderSize(c, 1),
+		rwc:          rwc,
+		r:            bufio.NewReaderSize(rwc, 1),
 		keys:         make(map[ID]key),
 		tables:       make(map[ID]*Table),
 		tableNames:   make(map[string]ID),
@@ -85,7 +84,7 @@ func (c *Client) Close() error {
 	close(c.writeChan)
 	close(c.putRequests)
 	c.wg.Wait()
-	return c.c.Close()
+	return c.rwc.Close()
 }
 
 // Table returns the table with the given name, requesting the table from the
@@ -107,7 +106,7 @@ func (c *Client) Table(name string) (*Table, error) {
 
 	c.tableNames[name] = table.id
 	c.tables[table.id] = table
-	c.writeChan <- tableAssignment{name, table.id}
+	c.writeChan <- tableRequest{name, table.id}
 	return table, nil
 }
 
@@ -127,12 +126,13 @@ func (c *Client) read() {
 			err = c.readTableAssignment()
 		case code == codeAssignment:
 			err = c.readAssignment()
-		case code == codeConfirmation:
+		case code >= codeConfirmation:
 			err = c.readConfirmation()
-		case code == codeDenial:
+		case code >= codeDenial:
 			err = c.readDenial()
 		default:
 			// TODO: log bad code
+			c.r.ReadByte()
 		}
 
 		// TODO: log error
@@ -158,6 +158,7 @@ func (c *Client) readData() error {
 	}
 	k := c.keys[localID]
 	c.tables[k.TableID].update(k.Name, entry)
+	c.writeChan <- confirmation(1)
 	return nil
 }
 
@@ -261,7 +262,7 @@ func (c *Client) write() {
 	defer c.wg.Done()
 	for e := range c.writeChan {
 		// TODO: log error
-		e.encode(c.c)
+		e.encode(c.rwc)
 	}
 }
 
@@ -313,6 +314,7 @@ func (c *Client) getKeyID(tableID ID, name string) ID {
 	k := key{TableID: tableID, Name: name, ID: c.nextKeyID}
 	c.keys[k.ID] = k
 	c.nextKeyID++
+	c.writeChan <- k
 	return k.ID
 }
 
@@ -340,13 +342,13 @@ func (k key) encode(w io.Writer) error {
 	return nil
 }
 
-type tableAssignment struct {
+type tableRequest struct {
 	TableName string
 	LocalID   ID
 }
 
-func (ta tableAssignment) encode(w io.Writer) error {
-	if _, err := w.Write([]byte{codeTableAssignment}); err != nil {
+func (ta tableRequest) encode(w io.Writer) error {
+	if _, err := w.Write([]byte{codeTableRequest}); err != nil {
 		return err
 	}
 	if err := writeString(w, ta.TableName); err != nil {
@@ -375,4 +377,11 @@ func (e entryData) encode(w io.Writer) error {
 		return err
 	}
 	return e.Value.encode(w)
+}
+
+type confirmation byte
+
+func (c confirmation) encode(w io.Writer) error {
+	_, err := w.Write([]byte{codeConfirmation | byte(c)})
+	return err
 }
