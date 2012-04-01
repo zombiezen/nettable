@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"net"
+	"strconv"
 	"sync"
 )
 
@@ -56,6 +58,15 @@ type Client struct {
 	confirmChan chan bool
 
 	wg sync.WaitGroup
+}
+
+// Dial returns a new client connected to the host on the default port.
+func Dial(host string) (*Client, error) {
+	c, err := net.Dial("tcp", host+":"+strconv.Itoa(DefaultPort))
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(c), nil
 }
 
 // NewClient creates a new client from a connection.
